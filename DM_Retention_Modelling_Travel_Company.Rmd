@@ -1,0 +1,755 @@
+---
+title: "DM3"
+author: "Vibhav Mayekar,Pratik Sharma, Jitesh Patil"
+date: "2/27/2022"
+output: word_document
+---
+
+
+```{r}
+#install.packages('readxl')
+#install.packages('readxl')
+#install.packages("randomForest")
+#install.packages("caret")
+#install.packages("ROCR")
+#install.packages("corrplot")
+library(readxl)
+library(tidyverse)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(apaTables)
+library(rpart)
+library(rpart.plot)
+library(psych)
+library(randomForest)
+library(caret)
+library(ROCR)
+library(ISLR)
+#install.packages('readxl')
+#install.packages("randomForest")
+#install.packages("caret")
+#install.packages("ROCR")
+
+f<-file.choose()
+Retention_modeling <- read_excel(f)
+#Retention_modeling <- read_excel("Retention modeling.xlsx",sheet = 2)
+##View(Retention_modeling)
+rm1 <- Retention_modeling
+ogdata <- Retention_modeling
+View(rm1)
+```
+```{r}
+rm1 <- rm1[-(2390:2392),,drop=FALSE]
+ogdata <- ogdata[-(2390:2392),,drop=FALSE]
+
+
+
+rm1$Retained.in.2012. <- as.factor(ifelse(rm1$Retained.in.2012. == 1, "Retained" , "Not Retained"))
+
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "Elementary->Elementary", "E->E")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "Middle->Middle", "M->M")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "High->High", "H->H")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "Undefined->Undefined", "U->U")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType,
+          rm1$SchoolGradeType == "Middle->Undefined", "M->U")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType,
+          rm1$SchoolGradeType == "Elementary->Middle", "E->M")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "Middle->High", "M->H")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType,
+          rm1$SchoolGradeType == "Elementary->High", "E->H")
+rm1$SchoolGradeType <- 
+  replace(rm1$SchoolGradeType, 
+          rm1$SchoolGradeType == "Elementary->Undefined", "E->U")
+
+rm1$Is.Non.Annual. <- as.factor(ifelse(rm1$Is.Non.Annual. == 1, "Yes" , "No"))
+
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "P1", "P")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "P3", "P")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "P4", "P")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "P5", "P")
+
+rm1$Income.Level <- 
+  replace(rm1$Income.Level, rm1$Income.Level == "Z", "Unclassified")
+
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "Q", "High")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "P", "High")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "O", "High")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "N", "High")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "M", "High")
+
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "L", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "K", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "J", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "I", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "H", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "G", "Medium")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "F", "Medium")
+
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "E", "Low")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "D", "Low")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "C", "Low")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "B", "Low")
+rm1$Income.Level <- replace(rm1$Income.Level, rm1$Income.Level == "A", "Low")
+
+# 
+# Group.State=AK,AL,AR,AZ,Bermuda,CA,CO,CT,FL,IA,ID,IL,IN,KS,MD,MN,MS,NC,NE,NJ,NM,
+# NV,NY,OK,OR,PA,TN,TX,UT,VA,WA
+# 
+# Group.State=GA,HI,KY,LA,MA,MI,MO,NH,OH,PR,SC,SD,WI
+
+```
+#Data cleaning columns A to R
+
+# removing redundant columns with dates and irrelevant info.
+```{r}
+rm1 <- rm1[,-c(1 ,9 ,10, 11,12 ,17,18,21,37,39,40)]
+rm1 <- rm1[,-c(4)]
+
+##data.frame(colnames(rm1)) #Returns column index numbers in table format,df=DataFrame name
+```
+#  Removed ID , Departure.Date , Return.Date ,	Deposit.Date ,
+#Special.Pay , Early.RPL,	Latest.RPL
+
+
+#Writing functions for mode
+```{r}
+
+find_mode <- function(x) 
+  {
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
+}
+
+
+#Checking NA/Null and replacing with with mean/mode - > from.grade 
+
+sum((rm1$From.Grade) == 'NA')
+modeFG <- find_mode(rm1$From.Grade)
+rm1$From.Grade <- replace(rm1$From.Grade,(rm1$From.Grade) == 'NA',modeFG)
+
+
+#Checking NA/Null and replacing with with mean/mode - > To grade 
+
+sum((rm1$To.Grade) == 'NA')
+modeTG <- find_mode(rm1$To.Grade)
+rm1$To.Grade <- replace(rm1$To.Grade,((rm1$To.Grade) == 'NA'),modeTG)
+
+
+#Checking NA/Null and replacing with with mean/mode - > Travel.type
+
+sum((rm1$Travel.Type) == 'N')
+modeTT <- find_mode(rm1$Travel.Type)
+rm1$Travel.Type <- replace(rm1$Travel.Type , rm1$Travel.Type == 'N' , modeTT) 
+#N replaced with mode
+
+
+#### 03/07/2022 New Part###################
+
+
+###Data Cleaning
+
+
+#############Cannot replace dates#################
+
+sum(is.na(rm1$Poverty.Code))
+modepc <- find_mode(rm1$Poverty.Code)
+rm1$Poverty.Code <- replace(rm1$Poverty.Code,is.na(rm1$Poverty.Code)==TRUE,
+                            modepc)
+
+
+sum((rm1$CRM.Segment) == 'NA')
+modecrms <- find_mode(rm1$CRM.Segment)
+rm1$CRM.Segment <- replace(rm1$CRM.Segment,(rm1$CRM.Segment) == 'NA',modecrms)
+
+
+sum(is.na(rm1$MDR.Low.Grade))
+modemlg <- find_mode(rm1$MDR.Low.Grade)
+rm1$MDR.Low.Grade <- replace(rm1$MDR.Low.Grade,is.na(rm1$MDR.Low.Grade)==TRUE,
+                             modemlg)
+
+
+
+
+sum(is.na(rm1$MDR.High.Grade))
+sum((rm1$MDR.High.Grade) == 'NA')
+modemhg <- find_mode(rm1$MDR.High.Grade)
+rm1$MDR.High.Grade <- replace(rm1$MDR.High.Grade,rm1$MDR.High.Grade== 'NA',
+                              modemhg)
+
+sum(is.na(rm1$Total.School.Enrollment))
+meantse <- round(mean(rm1$Total.School.Enrollment,na.rm=TRUE))
+rm1$Total.School.Enrollment <- 
+  replace(rm1$Total.School.Enrollment,
+          is.na(rm1$Total.School.Enrollment)==TRUE,meantse)
+
+
+sum(is.na(rm1$Income.Level))
+modeil <- find_mode(rm1$Income.Level)
+rm1$Income.Level <- replace(rm1$Income.Level,is.na(rm1$Income.Level)==TRUE,modeil)
+
+
+sum((rm1$DifferenceTraveltoFirstMeeting) == 'NA')
+meandtfm <-
+  round(mean(as.numeric(rm1$DifferenceTraveltoFirstMeeting),na.rm=TRUE))
+rm1$DifferenceTraveltoFirstMeeting <- 
+  replace(rm1$DifferenceTraveltoFirstMeeting,
+                            rm1$DifferenceTraveltoFirstMeeting == 'NA',meandtfm)
+
+
+sum(is.na(rm1$DifferenceTraveltoLastMeeting))
+sum((rm1$DifferenceTraveltoLastMeeting) == 'NA')
+meandtlm <- round(mean(as.numeric(rm1$DifferenceTraveltoLastMeeting),na.rm=TRUE))
+rm1$DifferenceTraveltoLastMeeting <- replace(rm1$DifferenceTraveltoLastMeeting,
+                            rm1$DifferenceTraveltoLastMeeting == 'NA',meandtfm)
+
+
+sum(is.na(rm1$FPP.to.School.enrollment))
+sum((rm1$FPP.to.School.enrollment) == 'NA')
+meanftse <- round(mean(as.numeric(rm1$FPP.to.School.enrollment),na.rm=TRUE))
+rm1$FPP.to.School.enrollment <- replace(rm1$FPP.to.School.enrollment,
+                            rm1$FPP.to.School.enrollment == 'NA',meanftse)
+
+
+rm1$SchoolSizeIndicator <- 
+  sapply(rm1$SchoolSizeIndicator, as.character, na.rm=TRUE)
+sum(is.na(rm1$SchoolSizeIndicator))
+modessi <- 
+  find_mode((rm1$SchoolSizeIndicator))
+rm1$SchoolSizeIndicator <- 
+  replace(rm1$SchoolSizeIndicator,is.na(rm1$SchoolSizeIndicator) == TRUE,modessi)
+
+unique(rm1$SchoolSizeIndicator)
+```
+## Cpoy of frame for RF
+```{r}
+
+rm2 <- rm1
+
+```
+```{r}
+rm1$From.Grade <- as.factor(rm1$From.Grade)
+rm1$To.Grade <- as.factor(rm1$To.Grade)
+rm1$Travel.Type <- as.factor(rm1$Travel.Type)
+
+
+
+rm1$Poverty.Code <- as.factor(rm1$Poverty.Code)
+rm1$Region <- as.factor(rm1$Region)
+rm1$CRM.Segment <- as.factor(rm1$CRM.Segment)
+rm1$School.Type <- as.factor(rm1$School.Type)
+rm1$MDR.Low.Grade <- as.factor(rm1$MDR.Low.Grade)
+rm1$MDR.High.Grade  <- as.factor(rm1$MDR.High.Grade)
+rm1$Income.Level  <- as.factor(rm1$Income.Level)
+rm1$SPR.Product.Type  <- as.factor(rm1$SPR.Product.Type)
+rm1$SPR.New.Existing  <- as.factor(rm1$SPR.New.Existing)
+
+rm1$DifferenceTraveltoFirstMeeting <- as.numeric(rm1$DifferenceTraveltoFirstMeeting)
+rm1$DifferenceTraveltoLastMeeting <- as.numeric(rm1$DifferenceTraveltoLastMeeting)
+rm1$SchoolGradeTypeLow <- as.factor(rm1$SchoolGradeTypeLow)
+rm1$SchoolGradeTypeHigh <- as.factor(rm1$SchoolGradeTypeHigh)
+rm1$SchoolGradeType <- as.factor(rm1$SchoolGradeType)
+rm1$GroupGradeTypeLow <- as.factor(rm1$GroupGradeTypeLow)
+rm1$GroupGradeTypeHigh <- as.factor(rm1$GroupGradeTypeHigh)
+rm1$GroupGradeType <- as.factor(rm1$GroupGradeType)
+rm1$DepartureMonth <- as.factor(rm1$DepartureMonth)
+rm1$MajorProgramCode <- as.factor(rm1$MajorProgramCode)
+rm1$FPP.to.School.enrollment <- as.numeric(rm1$FPP.to.School.enrollment)
+rm1$MajorProgramCode <- as.factor(rm1$MajorProgramCode)
+rm1$SchoolSizeIndicator <- as.factor(rm1$SchoolSizeIndicator)
+
+```
+#Plotting data
+
+```{r}
+#plotting schoolgradetype against target
+p1<-ggplot(data=rm1,aes(x=SchoolGradeType, y=Retained.in.2012., 
+                        fill=Retained.in.2012.))+geom_bar( stat="identity")
+p1
+
+```
+
+```{r}
+#plotting isnonannual against target
+p2<-ggplot(data=rm1, 
+           aes(x=Is.Non.Annual.,y=Retained.in.2012., 
+               fill=Retained.in.2012.)) +geom_bar( stat="identity")
+p2
+```
+
+```{r}
+unique(rm1$SchoolSizeIndicator)
+#plotting schoolsize against target
+p3<-ggplot(data=rm1, aes(x=SchoolSizeIndicator, 
+                         y=Retained.in.2012., fill=Retained.in.2012.)) +
+  geom_bar( stat="identity")
+p3
+```
+
+```{r}
+#plotting spr new existing against target
+p4<-ggplot(data=rm1, aes(x=SPR.New.Existing,y=Retained.in.2012.,
+                         fill=Retained.in.2012.)) +
+  geom_bar( stat="identity")
+p4
+```
+
+```{r}
+
+p6<-ggplot(data=rm1, aes(x=Income.Level, 
+                         y=Retained.in.2012., fill=Retained.in.2012.)) +
+  geom_bar( stat="identity")
+p6
+
+```
+```{r}
+# library(ggplot2)
+# Retained = rm1[which(rm1[,44]=='Retained'),]
+# Not_Retained = rm1[which(rm1[,44]=="Not Retained"),]
+# 
+# view(Retained)
+# par(mfrow =c(1,3))
+# 
+# hist(as.numeric(unlist(Retained[,44])),xlab="Days",ylab="",
+#      main="Retained Vs Age",
+#      ylim=c(0,160))
+# hist(as.numeric(unlist(Not_Retained[,44])),xlab="Days",ylab="",
+#      main="Not Retained Vs Age",
+#      ylim=c(0,160))
+# 
+# hist(as.numeric(unlist(rm1[,23])),xlab="Days",ylab="",
+#      main="Overall Response vs Age")
+
+```
+
+```{r}
+## Total School Enrollment vs Retention
+input_data <- rm1 [ , c("Total.School.Enrollment" ,"Retained.in.2012.")]
+
+
+p7<- plot(y=input_data$Total.School.Enrollment , x=input_data$Retained.in.2012.,
+     main="Enrollment vs Trips retained",ylab="Total.School.Enrollment", 
+     xlab= "Retained.in.2012.")
+p7
+
+
+```
+
+``` {r}
+Retained = rm1[which(rm1[,44]=='Retained'),]
+Not_Retained = rm1[which(rm1[,31]=="Not Retained"),]
+
+plot(rm1[,44],main="Retention Rate",ylab="Number", 
+     xlab= "Target Variable Type") 
+#Finding the correlation 
+```
+``` {r}
+par(mfrow =c(1,1))
+plot(y=as.numeric(unlist(Retained[,44])),
+x=as.numeric(unlist(Retained[,7])),pch=1,
+  xlab="Travel.Type",ylab="R",main="Retained vs Travel Type")
+  points(y=as.numeric(unlist(Not_Retained[,44])),
+x=as.numeric(unlist(bad[,7])),pch=3,
+  xlab="Travel.Type",ylab="Retained.in.2012.",main="")
+  plot(y=as.numeric(unlist(bad[,44])),
+x=as.numeric(unlist(bad[,7])),pch=3,
+  xlab="Travel.Type",ylab="Retained.in.2012.",
+  main="Travel.Type vs Overall Retention")
+  plot(y=as.numeric(unlist(bad[,44]))
+  
+  
+  
+  
+```
+
+```{r}
+
+# plotting correlation between numeric variables 
+#table(is.na(rmNew))
+#is.na(rmNew)
+
+rmcorr2 <- select_if(rm1, is.numeric)
+rmcorr3 <- as.numeric(rm1$Retained.in.2012.)
+rmcorr2 <- cbind(rmcorr2,rmcorr3)
+
+df.cor = cor(rmcorr2)
+corrplot(df.cor)
+apa.cor.table(rmcorr2,"APA correlation Table3.doc")
+
+
+```
+
+#Decision Tree
+```{r}
+#Data partitioning into train and Test data
+
+set.seed(35)
+indx <-  sample(2, nrow(rm1) , replace = T , prob = c(0.6 , 0.4)) 
+train <- rm1[indx == 1 , ]
+test <- rm1[indx == 2 , ]
+
+#nrow(train)/nrow(rm1)
+#nrow(test)/nrow(rm1)
+
+###Functions for Evaluation metrics
+
+EvaluationMatrix <-  function(TP,FP,FN,TN)
+{
+Accuracy <- (TP+TN)/(TP+TN+FP+FN)
+Precision <-  TP/(TP + FP)
+Recall <- TP/(TP +FN)
+Fscore <- 2*(Recall * Precision) / (Recall + Precision)
+
+EVM <-cbind(Accuracy,Precision,Recall,Fscore)
+
+}
+## Decision Tree 1
+
+myFormula = Retained.in.2012. ~ .
+myTree <- rpart(myFormula , data = train)
+print(myTree)
+
+rpart.plot(myTree)
+
+# prob of positive and negative class
+##predict(myTree, data = train)
+
+
+# finding the error rate for train data
+pred_train1 <- predict(myTree, data = train , type = "class")
+mean(train$Retained.in.2012. != pred_train1) 
+
+##length(pred_train1)
+##length(rm1$Retained.in.2012.)
+
+# finding the error rate for test data
+pred_test1 <- predict( myTree, data1 = test , type = "class") 
+mean(test$Retained.in.2012. != pred_test1)
+
+##view(pred_test1)
+## Evaluation Matrix
+DTMatrix1 <-table(actual=as.factor(train$Retained.in.2012.), pred = pred_test1)
+DTMatrix1
+
+FinalEVM1 <- EvaluationMatrix(DTMatrix1[1,1], DTMatrix1[2,1],DTMatrix1[1,2],
+                              DTMatrix1[2,2])
+FinalEVM1
+
+```
+```{r}
+summary(myTree)
+
+```
+
+## Decision tree with numeric variables
+```{r}
+
+set.seed(35)
+indx <-  sample(2, nrow(rm1) , replace = T , prob = c(0.6 , 0.4)) 
+train <- rm1[indx == 1 , ]
+test <- rm1[indx == 2 , ]
+
+myFormulanum = Retained.in.2012. ~ Tuition + FRP.Active  +School.Sponsor + 
+  FPP+ Total.Pax + SingleGradeTripFlag + Total.Discount.Pax
+
+myTreenum <- rpart(myFormulanum , data = train ,method="class")
+print(myTreenum)
+rpart.plot(myTreenum)
+
+```
+```{r}
+predict(myTreenum, data = train)
+##p <- predict(myTreenum,rm1,type="class")
+# finding the error rate for train data
+pred_trainnum <- predict( myTreenum , data = train , type = "class")
+mean(train$Retained.in.2012. != pred_trainnum) 
+
+# finding the error rate for test data
+pred_testnum <- predict( myTreenum , data1 = test , type = "class") 
+mean(test$Retained.in.2012. != pred_testnum) 
+
+view(pred_testnum)
+
+```
+```{r}
+## Evaluation Matrix
+DTMatrixnum <- table(actual=rm1$Retained.in.2012., pred = pred_testnum)
+DTMatrixnum
+
+FinalEVMnum <- 
+  EvaluationMatrix(DTMatrixnum[1,1],DTMatrixnum[2,1],
+                   DTMatrix1[1,2], DTMatrixnum[2,2])
+FinalEVMnum
+
+```
+```{r}
+summary(myTreenum)
+
+```
+
+
+## Decision Tree myTreenum2
+```{r}
+# pruning with gini split 
+myTreenum2 <- rpart(myFormula , data = train  , parms =list (split = "gini") ,
+                    control = rpart.control(minsplit = 6 , minbucket = 6 , 
+                                            cp = 0.01 ))
+
+
+rpart.plot(myTreenum2)
+
+# finding the error rate for train data
+pred_trainnum2 <- predict( myTreenum2 , data = train , type = "class")
+mean(train$Retained.in.2012. != pred_trainnum2) 
+
+# finding the error rate for test data
+pred_testnum2 <- predict( myTreenum2 , data = test , type = "class") 
+mean(test$Retained.in.2012. != pred_testnum2)
+
+view(pred_testnum2)
+
+```
+```{r}
+## Evaluation Matrix
+DTMatrixnum2 <- table(actual=train$Retained.in.2012., pred = pred_testnum2)
+DTMatrixnum2
+
+FinalEVMnum2 <- EvaluationMatrix(DTMatrixnum2[1,1], DTMatrixnum2[2,1],
+                                 DTMatrixnum2[1,2],DTMatrixnum2[2,2])
+FinalEVMnum2
+
+```
+```{r}
+summary(myTreenum2)
+
+
+```
+
+## Random Forest
+
+``` {r}
+
+library(randomForest)
+
+rf<- randomForest(Retained.in.2012.~.,data = rm1,mtry = sqrt(ncol(rm1)-1),
+                   ntree = 300,proximity = T,importance = T)
+              
+
+print(rf)
+## The OOB error rate of our random forest model is .1972
+
+```
+
+```{r}
+attributes(rf)
+```
+
+```{r}
+plot(rf)
+```
+
+```{r}
+##rf$err.rate
+
+##  important variables based on MeanDecreaseAccuracy.
+
+library("dplyr")
+IMP <- importance(rf, type = 1)
+IMP
+```
+
+```{r}
+subset(IMP, IMP[] >  10)
+##filter(IMP, MeanDecreaseAccuracy >= 10)
+
+varImpPlot(rf)
+
+
+rf$proximity
+
+
+rf3 <- randomForest(Retained.in.2012. ~ From.Grade + To.Grade +
+                      Is.Non.Annual.+ FRP.Active+ CRM.Segment+ MDR.High.Grade
++ Total.School.Enrollment + SPR.New.Existing + FPP + Total.Pax +
+  SingleGradeTripFlag + FPP.to.PAX, data = rm1,
+                   mtry = sqrt(ncol(rm1)-1), ntree = 300,
+                   proximity = T, importance = T)
+
+print(rf3)
+```
+
+```{r}
+
+rf4 <- randomForest(Retained.in.2012. ~ Is.Non.Annual.+SPR.New.Existing + SingleGradeTripFlag, data = rm1,
+                   mtry = sqrt(ncol(rm1)-1), ntree = 300,
+                   proximity = T, importance = T)
+
+print(rf4)
+
+head(rf$predicted)
+
+
+head(rf$votes)
+
+```
+
+
+```{r}
+
+ind <- sample(2, nrow(rm1), replace = T, prob = c(0.7, 0.3))
+trainrf <- rm1[ind == 1, ]
+Validation <- rm1[ind == 2, ]
+pr.err <- c()
+for(mt in seq(1,ncol(trainrf)))
+   {
+library(randomForest)
+rf1 <- randomForest(Retained.in.2012.~.,data = trainrf, ntree = 100,
+mtry = ifelse(mt == ncol(trainrf),
+mt-1, mt))
+predicted <- predict(rf1, newdata = Validation, type = "class")
+pr.err <- c(pr.err,mean(Validation$Retained.in.2012. != predicted))
+}
+
+bestmtry <- which.min(pr.err)
+
+bestmtry
+
+
+```
+
+
+```{r}
+# Plotting confusion matrix
+
+table(rf$predicted, rm1$Retained.in.2012., dnn = c("Predicted", "Actual"))
+
+
+```
+
+
+
+```{r}
+# plotting confusion Matrix
+
+confusionMatrix(rf$predicted, rm1$Retained.in.2012., positive = "Retained")             
+
+
+```
+
+
+
+```{r}
+score <- rf$votes[, 2] 
+
+pred <- prediction(score, rm1$Retained.in.2012.)
+
+### plotting Gain chart
+```
+
+
+```{r}
+perf <- performance(pred, "tpr", "rpp") 
+
+plot(perf)
+```
+
+
+#plotting ROC curve
+
+```{r}
+perf <- performance(pred, "tpr", "fpr")
+pred
+plot(perf)
+```
+
+
+
+## Finding area under the curve (AUC)
+
+
+```{r}
+auc <- unlist(slot(performance(pred, "auc"), "y.values"))
+auc
+```
+
+
+```{r}
+# Determine the best cut-off point
+perf <- performance(pred, "tpr", "fpr")
+
+opt.cut <- function(perf)
+  
+  { 
+  cut.ind <- mapply(FUN = function(x,y,p){d=(x-0)^2+(y-1)^2 
+  ind<- which(d==min(d)) 
+  c(recall = y[[ind]],specificity = 1-x[[ind]],cutoff = p[[ind]])}
+    
+    , perf@x.values, perf@y.values,perf@alpha.values)
+    }
+opt.cut
+
+
+
+best_cut <- opt.cut(perf$fpr,perf$tpr,perf$pred)
+
+cut.ind 
+
+```
+
+## CrossValidation in R
+```{r}
+
+#pacman::p_load(pacman,party,psych,rio,tidyverse)
+#library("ISLR")
+## Randomization ## Step 1 : Cut into K different folds
+
+k<- 5 ## number of K folds
+nmethod <- 1 ## number of methods used for comparison
+
+folds <- cut(seq(1, nrow(rm1)), breaks = k, labels =FALSE)
+
+## Matrix formulation
+model.err <- matrix (-1, k, nmethod , 
+                     dimnames = list(paste0("Fold", 1:k),c("LogitReg")))
+
+###For loop for different models
+for ( i in 1:k)
+{
+  testindexes <- which (folds == i , arr.ind = TRUE)  ## Track of test instances
+  
+  ## test and train data sets
+  test <- rm1 [testindexes, ]
+  train <- rm1 [-testindexes, ]
+  
+  ## model
+  
+  LogitModel <- glm(Retained.in.2012. ~ ., data = train , family = "binomial")
+  ## will return probability of prediction
+  pred <- predict(LogitModel , newdata = test, type = "response")
+  
+  pred_class <- as.factor(ifelse( pred >= 0.5, "Yes", "No"))
+  
+ ## error rate if test instances are not equal to Train for that fold
+  model.err[i] <- mean(test$Retained.in.2012. != pred_class)
+  
+}
+
+view(model.err)
+
+
+```
